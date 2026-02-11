@@ -1,0 +1,111 @@
+{
+  "name": "antigravity-usage-monitor",
+  "displayName": "Antigravity Usage Monitor",
+  "description": "Monitor Google Antigravity model usage with traffic-light indicators per model group",
+  "version": "0.1.0",
+  "publisher": "antigravity-monitor",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agmonitor",
+          "title": "Antigravity Monitor",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "agmonitor": [
+        {
+          "type": "webview",
+          "id": "agmonitor.dashboard",
+          "name": "Usage Dashboard"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "agmonitor.showDashboard",
+        "title": "AG Monitor: Show Dashboard"
+      },
+      {
+        "command": "agmonitor.logUsage",
+        "title": "AG Monitor: Log Usage"
+      },
+      {
+        "command": "agmonitor.resetUsage",
+        "title": "AG Monitor: Reset Usage"
+      },
+      {
+        "command": "agmonitor.exportUsage",
+        "title": "AG Monitor: Export Usage"
+      },
+      {
+        "command": "agmonitor.toggleModelGroup",
+        "title": "AG Monitor: Toggle Model Group"
+      }
+    ],
+    "configuration": {
+      "title": "Antigravity Usage Monitor",
+      "properties": {
+        "agmonitor.modelGroups": {
+          "type": "object",
+          "default": {
+            "premium": {
+              "enabled": true,
+              "limits": {
+                "yellow": 41,
+                "red": 21
+              }
+            },
+            "pro": {
+              "enabled": true,
+              "limits": {
+                "yellow": 41,
+                "red": 21
+              }
+            },
+            "flash": {
+              "enabled": true,
+              "limits": {
+                "yellow": 41,
+                "red": 21
+              }
+            }
+          },
+          "description": "Per-group configuration: enabled (visibility toggle) and limits (yellow/red thresholds for remaining quota)"
+        },
+        "agmonitor.quotaLimits": {
+          "type": "object",
+          "default": {
+            "premium": 100,
+            "pro": 100,
+            "flash": 100
+          },
+          "description": "Maximum quota (requests) per model group. Used to calculate remaining quota."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
