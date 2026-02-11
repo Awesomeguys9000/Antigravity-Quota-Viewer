@@ -94,7 +94,6 @@
         const header = el('div', 'group-header');
         header.innerHTML = `
             <div class="traffic-light ${group.light}"></div>
-            <span class="group-icon">${group.icon}</span>
             <span class="group-name">${group.name}</span>
             <span class="group-pct">${group.worstPct}%</span>
             <button class="eye-btn" title="Toggle visibility">👁</button>
@@ -128,7 +127,7 @@
 
             // Reset time label (same prominence as the % number)
             const resetLabel = el('div', 'group-reset-label');
-            resetLabel.textContent = isReady ? '✓ Ready' : `⏱ Resets in: ${resetFormatted}`;
+            resetLabel.textContent = isReady ? 'Ready' : `Resets in: ${resetFormatted}`;
             panel.appendChild(resetLabel);
 
             // Per-model rows (name + percentage only)

@@ -66,7 +66,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             return {
                 id: g.id,
                 name: g.name,
-                icon: g.icon,
                 color: g.color,
                 enabled: config.enabled,
                 light,

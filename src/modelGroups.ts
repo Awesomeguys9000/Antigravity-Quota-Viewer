@@ -8,7 +8,6 @@ export interface ModelGroup {
     name: string;
     /** Substrings to match against server model labels (case-insensitive) */
     labelPatterns: string[];
-    icon: string;
     color: string;
 }
 
@@ -19,7 +18,6 @@ export const MODEL_GROUPS: ModelGroup[] = [
         labelPatterns: [
             'opus', 'sonnet', 'gpt-oss', 'gpt oss', '120b',
         ],
-        icon: '💎',
         color: '#a78bfa', // purple
     },
     {
@@ -28,7 +26,6 @@ export const MODEL_GROUPS: ModelGroup[] = [
         labelPatterns: [
             'gemini 3 pro', 'gemini-3-pro', 'pro (high', 'pro (low',
         ],
-        icon: '⚡',
         color: '#60a5fa', // blue
     },
     {
@@ -37,7 +34,6 @@ export const MODEL_GROUPS: ModelGroup[] = [
         labelPatterns: [
             'flash', 'gemini 3 flash', 'gemini-3-flash',
         ],
-        icon: '🔥',
         color: '#34d399', // green
     },
 ];

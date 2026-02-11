@@ -99,7 +99,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const items = MODEL_GROUPS.map(g => {
                 const config = getGroupConfig(g.id);
                 return {
-                    label: `${g.icon} ${g.name}`,
+                    label: g.name,
                     description: config.enabled ? '✅ Visible' : '❌ Hidden',
                     groupId: g.id,
                     picked: config.enabled,
