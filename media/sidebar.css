@@ -273,6 +273,14 @@ body {
     margin-top: 6px;
 }
 
+.group-reset {
+    font-size: 11px;
+    color: var(--ag-muted);
+    margin-top: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
 /* ── All Models Section ────────────────────────────────────────── */
 
 .section {
@@ -315,7 +323,7 @@ body {
 
 .model-row {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 1fr auto;
     gap: 8px;
     padding: 4px 0;
     font-size: 11px;

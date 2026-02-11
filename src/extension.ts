@@ -238,11 +238,12 @@ function updateStatusBar(snapshot: QuotaSnapshot): void {
 
         gItem.item.text = `${emoji} ${label}: ${Math.round(worstPct)}%`;
 
-        // Build tooltip with per-model details
-        const details = models.map(m =>
-            `  ${m.label}: ${m.remainingPercentage !== undefined ? Math.round(m.remainingPercentage) + '%' : '?'} — resets ${m.timeUntilResetFormatted}`
+        // Build tooltip: shared reset time at top, models listed below
+        const sharedReset = models[0]?.timeUntilResetFormatted ?? 'Unknown';
+        const modelLines = models.map(m =>
+            `  • ${m.label}: ${m.remainingPercentage !== undefined ? Math.round(m.remainingPercentage) + '%' : '?'}`
         ).join('\n');
-        gItem.item.tooltip = `${label} Models:\n${details}`;
+        gItem.item.tooltip = `${label} — ${Math.round(worstPct)}% remaining\nResets in: ${sharedReset}\n\nModels:\n${modelLines}`;
 
         // Colour the background
         if (light === 'red') {

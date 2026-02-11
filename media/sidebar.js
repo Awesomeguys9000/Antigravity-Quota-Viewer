@@ -73,7 +73,6 @@
                 row.innerHTML = `
                     <div class="model-label${exhaustedClass}">${model.label}</div>
                     <div class="model-pct">${pct}%</div>
-                    <div class="model-reset">${model.resetFormatted}</div>
                 `;
                 sectionBody.appendChild(row);
             }
@@ -113,8 +112,13 @@
         bar.appendChild(fill);
         panel.appendChild(bar);
 
-        // Per-model rows
+        // Shared reset time (shown once, not per model)
         if (group.models.length > 0) {
+            const resetInfo = el('div', 'group-reset');
+            resetInfo.innerHTML = `⏱ Resets in: ${group.models[0].resetFormatted}`;
+            panel.appendChild(resetInfo);
+
+            // Per-model rows (name + percentage only)
             const modelList = el('div', 'group-models');
             for (const m of group.models) {
                 const row = el('div', 'model-row-compact');
@@ -122,7 +126,7 @@
                 const exhausted = m.isExhausted ? ' exhausted' : '';
                 row.innerHTML = `
                     <span class="model-name${exhausted}">${m.label}</span>
-                    <span class="model-info">${pct}% · ${m.resetFormatted}</span>
+                    <span class="model-info">${pct}%</span>
                 `;
                 modelList.appendChild(row);
             }
