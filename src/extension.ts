@@ -238,6 +238,10 @@ function updateStatusBar(snapshot: QuotaSnapshot): void {
 
         gItem.item.text = `${emoji} ${label}: ${Math.round(worstPct)}%`;
 
+        // Check for long reset (> 5 hours)
+        const FIVE_HOURS_MS = 18000000;
+        const isLongReset = models.some(m => m.timeUntilReset > FIVE_HOURS_MS);
+
         // Build tooltip: shared reset time at top, models listed below
         const sharedReset = models[0]?.timeUntilResetFormatted ?? 'Unknown';
         const modelLines = models.map(m =>
@@ -245,8 +249,15 @@ function updateStatusBar(snapshot: QuotaSnapshot): void {
         ).join('\n');
         gItem.item.tooltip = `${label} — ${Math.round(worstPct)}% remaining\nResets in: ${sharedReset}\n\nModels:\n${modelLines}`;
 
+        if (isLongReset) {
+            gItem.item.tooltip += '\n\n⚠️ Long Reset: Over 5 hours remaining';
+        }
+
         // Colour the background
-        if (light === 'red') {
+        if (isLongReset) {
+            // Force red background for long resets
+            gItem.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+        } else if (light === 'red') {
             gItem.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
         } else if (light === 'yellow') {
             gItem.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');

@@ -390,3 +390,22 @@ body {
         transform: rotate(360deg);
     }
 }
+
+/* ── Long Reset Alert (> 5h) ──────────────────────────────────── */
+
+.group-panel.long-reset {
+    border-color: rgba(239, 68, 68, 0.6);
+    background: linear-gradient(to bottom, rgba(239, 68, 68, 0.05), var(--ag-surface));
+}
+
+.group-panel.long-reset .group-name {
+    color: var(--ag-danger);
+}
+
+.group-panel.long-reset .reset-bar {
+    background: linear-gradient(90deg, var(--ag-danger), #fca5a5) !important;
+}
+
+.group-panel.long-reset .group-reset-label {
+    color: var(--ag-danger);
+}

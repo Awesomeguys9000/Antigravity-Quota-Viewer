@@ -70,6 +70,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 enabled: config.enabled,
                 light,
                 worstPct: Math.round(worstPct),
+                isLongReset: models.some(m => m.timeUntilReset > 18000000), // > 5 hours
                 models: models.map(m => ({
                     label: m.label,
                     modelId: m.modelId,

@@ -89,6 +89,9 @@
 
     function renderGroup(group) {
         const panel = el('div', `group-panel light-${group.light}`);
+        if (group.isLongReset) {
+            panel.classList.add('long-reset');
+        }
 
         // Header row
         const header = el('div', 'group-header');
