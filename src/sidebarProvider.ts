@@ -77,6 +77,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     remainingPct: m.remainingPercentage !== undefined ? Math.round(m.remainingPercentage) : null,
                     isExhausted: m.isExhausted,
                     resetFormatted: m.timeUntilResetFormatted,
+                    timeUntilResetMs: m.timeUntilReset,
                 })),
             };
         });

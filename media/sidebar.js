@@ -105,18 +105,31 @@
         });
         panel.appendChild(header);
 
-        // Quota bar
+        // Quota bar (usage remaining)
         const bar = el('div', 'quota-bar');
         const fill = el('div', `quota-bar-fill ${group.light}`);
         fill.style.width = `${group.worstPct}%`;
         bar.appendChild(fill);
         panel.appendChild(bar);
 
-        // Shared reset time (shown once, not per model)
+        // Reset countdown bar (blue, 5hr = 100%, 0 = 0%)
         if (group.models.length > 0) {
-            const resetInfo = el('div', 'group-reset');
-            resetInfo.innerHTML = `⏱ Resets in: ${group.models[0].resetFormatted}`;
-            panel.appendChild(resetInfo);
+            const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
+            const resetMs = group.models[0].timeUntilResetMs;
+            const resetFormatted = group.models[0].resetFormatted;
+            const isReady = resetFormatted === 'Ready' || resetMs <= 0;
+            const resetPct = isReady ? 0 : Math.min(100, Math.round((resetMs / FIVE_HOURS_MS) * 100));
+
+            const resetBar = el('div', 'quota-bar');
+            const resetFill = el('div', 'quota-bar-fill reset-bar');
+            resetFill.style.width = `${resetPct}%`;
+            resetBar.appendChild(resetFill);
+            panel.appendChild(resetBar);
+
+            // Reset time label (same prominence as the % number)
+            const resetLabel = el('div', 'group-reset-label');
+            resetLabel.textContent = isReady ? '✓ Ready' : `⏱ Resets in: ${resetFormatted}`;
+            panel.appendChild(resetLabel);
 
             // Per-model rows (name + percentage only)
             const modelList = el('div', 'group-models');

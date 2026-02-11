@@ -120,6 +120,10 @@ body {
     background: linear-gradient(90deg, var(--ag-danger), #fca5a5);
 }
 
+.quota-bar-fill.reset-bar {
+    background: linear-gradient(90deg, #3b82f6, #93c5fd);
+}
+
 /* ── Group Panel ───────────────────────────────────────────────── */
 
 .groups-container {
@@ -273,12 +277,12 @@ body {
     margin-top: 6px;
 }
 
-.group-reset {
-    font-size: 11px;
-    color: var(--ag-muted);
-    margin-top: 6px;
-    padding: 4px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+.group-reset-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ag-text);
+    margin-top: 4px;
+    margin-bottom: 2px;
 }
 
 /* ── All Models Section ────────────────────────────────────────── */
