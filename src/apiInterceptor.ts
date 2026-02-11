@@ -429,6 +429,7 @@ export class QuotaService {
     public readonly onUpdate = this._onUpdate.event;
     public readonly onError = this._onError.event;
     private _lastSnapshot?: QuotaSnapshot;
+    private _consecutiveFailures = 0;
 
     constructor() {
         this._outputChannel = vscode.window.createOutputChannel('AG Monitor');
@@ -477,16 +478,61 @@ export class QuotaService {
     }
 
     private async _fetchAndEmit(): Promise<void> {
-        if (!this._processInfo) { return; }
+        if (!this._processInfo) {
+            // Not initialized yet — try to connect
+            await this._reconnect();
+            return;
+        }
 
         try {
             const raw = await fetchQuota(this._processInfo.connectPort, this._processInfo.csrfToken);
+            this._consecutiveFailures = 0;
             const snapshot = parseQuotaResponse(raw);
             this._lastSnapshot = snapshot;
             this._onUpdate.fire(snapshot);
         } catch (err: any) {
-            this._log(`Fetch error: ${err.message}`);
+            this._consecutiveFailures++;
+            const isConnectionError = err.code === 'ECONNREFUSED' || err.code === 'ECONNRESET' ||
+                err.code === 'ETIMEDOUT' || err.message?.includes('timeout') ||
+                err.message?.includes('socket hang up');
+
+            if (isConnectionError) {
+                this._log(`Connection lost (${err.code || err.message}) — attempting reconnect...`);
+                const reconnected = await this._reconnect();
+                if (reconnected) {
+                    // Retry the fetch immediately with new connection info
+                    try {
+                        const raw = await fetchQuota(this._processInfo!.connectPort, this._processInfo!.csrfToken);
+                        this._consecutiveFailures = 0;
+                        const snapshot = parseQuotaResponse(raw);
+                        this._lastSnapshot = snapshot;
+                        this._onUpdate.fire(snapshot);
+                        return;
+                    } catch (retryErr: any) {
+                        this._log(`Retry after reconnect also failed: ${retryErr.message}`);
+                    }
+                }
+            } else {
+                this._log(`Fetch error: ${err.message}`);
+            }
+
             this._onError.fire(err);
+        }
+    }
+
+    /**
+     * Re-detect the language server process (port may have changed).
+     */
+    private async _reconnect(): Promise<boolean> {
+        this._log('Reconnecting — re-detecting language server...');
+        this._processInfo = await findAntigravityProcess(msg => this._log(msg));
+
+        if (this._processInfo) {
+            this._log(`✅ Reconnected: port=${this._processInfo.connectPort}`);
+            return true;
+        } else {
+            this._log('❌ Reconnect failed — language server not found');
+            return false;
         }
     }
 
