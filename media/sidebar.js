@@ -134,6 +134,7 @@
             const modelList = el('div', 'group-models');
             for (const m of group.models) {
                 const row = el('div', 'model-row-compact');
+                const exhausted = m.isExhausted ? ' exhausted' : '';
                 const pctVal = m.remainingPct !== null ? m.remainingPct : null;
                 // Show if unknown (?) or if it differs from the group's worst percentage
                 const showPct = pctVal === null || pctVal !== group.worstPct;
