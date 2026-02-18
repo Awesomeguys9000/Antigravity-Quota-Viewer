@@ -7,6 +7,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private _disposables: vscode.Disposable[] = [];
     private _lastSnapshot?: QuotaSnapshot;
+    // Map<groupId, { active: boolean, dippedBelow4h: boolean, conditionAMet: boolean }>
+    private _stickyRedStates = new Map<string, { active: boolean, dippedBelow4h: boolean, conditionAMet: boolean }>();
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -63,6 +65,56 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             const worstPct = getWorstRemainingInGroup(models);
             const light = getTrafficLight(worstPct, config.limits);
 
+            // ── Sticky Red Logic ─────────────────────────────────────────────
+            // 1. Calculate max reset time in group
+            let maxResetMs = 0;
+            for (const m of models) {
+                if (m.timeUntilReset > maxResetMs) {
+                    maxResetMs = m.timeUntilReset;
+                }
+            }
+
+            // 2. Get or initialize state
+            let state = this._stickyRedStates.get(g.id);
+            if (!state) {
+                state = { active: false, dippedBelow4h: false, conditionAMet: false };
+                this._stickyRedStates.set(g.id, state);
+            }
+
+            const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
+            const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+
+            // 3. Activation: If > 5 hours, activate sticky mode
+            if (maxResetMs > FIVE_HOURS_MS) {
+                state.active = true;
+                state.dippedBelow4h = false; // Reset trackers on new activation
+                state.conditionAMet = false;
+            }
+
+            // 4. Maintenance & Reset
+            if (state.active) {
+                // Track Condition A: "Timer goes below 4hr, and then goes back above 4hr"
+
+                // Part 1: Dip below 4h
+                if (maxResetMs > 0 && maxResetMs < FOUR_HOURS_MS) {
+                    state.dippedBelow4h = true;
+                }
+
+                // Part 2: Recover above 4h (Latch Condition A)
+                if (state.dippedBelow4h && maxResetMs > FOUR_HOURS_MS) {
+                    state.conditionAMet = true;
+                }
+
+                // Reset Check: "Until both A and B"
+                // Condition A: conditionAMet is true
+                // Condition B: model group says it has 100% (worstPct >= 100)
+                if (state.conditionAMet && worstPct >= 100) {
+                    state.active = false;
+                    state.dippedBelow4h = false;
+                    state.conditionAMet = false;
+                }
+            }
+
             return {
                 id: g.id,
                 name: g.name,
@@ -70,7 +122,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 enabled: config.enabled,
                 light,
                 worstPct: Math.round(worstPct),
-                isLongReset: models.some(m => m.timeUntilReset > 18000000), // > 5 hours
+                isLongReset: state.active,
                 models: models.map(m => ({
                     label: m.label,
                     modelId: m.modelId,

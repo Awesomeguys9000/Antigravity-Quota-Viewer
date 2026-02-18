@@ -2,8 +2,12 @@
   "name": "antigravity-usage-monitor",
   "displayName": "Antigravity Usage Monitor",
   "description": "Monitor Google Antigravity model usage with traffic-light indicators per model group",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "antigravity-monitor",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/antigravity-monitor/vscode"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
