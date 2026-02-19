@@ -3,6 +3,9 @@ import * as https from 'https';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as process from 'process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 const execAsync = promisify(exec);
 
@@ -42,6 +45,7 @@ export interface QuotaSnapshot {
 // ── Process Finder ───────────────────────────────────────────────────
 
 function getProcessName(): string {
+    // Note: This function is kept for reference but we now use broader search terms
     if (process.platform === 'win32') {
         return 'language_server_windows_x64.exe';
     } else if (process.platform === 'darwin') {
@@ -52,16 +56,15 @@ function getProcessName(): string {
 }
 
 async function findAntigravityProcess(log: (msg: string) => void): Promise<ProcessInfo | null> {
-    const processName = getProcessName();
-    log(`Looking for process: ${processName}`);
+    log(`Looking for Antigravity/Language Server processes...`);
 
     let candidates: ProcessCandidate[] = [];
 
     try {
         if (process.platform === 'win32') {
-            candidates = await findProcessesWindows(processName, log);
+            candidates = await findProcessesWindows(log);
         } else {
-            candidates = await findProcessesUnix(processName, log);
+            candidates = await findProcessesUnix(log);
         }
     } catch (err: any) {
         log(`Process detection failed: ${err.message}`);
@@ -77,22 +80,22 @@ async function findAntigravityProcess(log: (msg: string) => void): Promise<Proce
 
     for (const candidate of candidates) {
         const { pid, cmdLine } = candidate;
-        log(`Checking PID ${pid}...`);
 
-        // Extract CSRF token and extension port
+        // Extract CSRF token and extension port - these vary by version but usually present
         const portMatch = cmdLine.match(/--extension_server_port[=\s]+(\d+)/);
         const tokenMatch = cmdLine.match(/--csrf_token[=\s]+([a-f0-9\-]+)/i);
 
         if (!tokenMatch || !tokenMatch[1]) {
-            log(`  Skipping PID ${pid}: CSRF token not found in command line`);
+            // log(`  Skipping PID ${pid}: CSRF token not found`); 
             continue;
         }
 
         const extensionPort = portMatch ? parseInt(portMatch[1], 10) : 0;
         const csrfToken = tokenMatch[1];
 
+        log(`Checking PID ${pid} (ExtensionPort=${extensionPort})...`);
+
         // Find listening ports for this specific process
-        // We do this inside the loop so we only query ports for processes that look valid
         let ports: number[] = [];
         try {
             if (process.platform === 'win32') {
@@ -115,8 +118,6 @@ async function findAntigravityProcess(log: (msg: string) => void): Promise<Proce
         if (connectPort) {
             log(`✅ Connected using PID=${pid}, ConnectPort=${connectPort}`);
             return { pid, extensionPort, connectPort, csrfToken };
-        } else {
-            log(`  PID ${pid} did not respond on any port`);
         }
     }
 
@@ -129,96 +130,180 @@ interface ProcessCandidate {
     cmdLine: string;
 }
 
-async function findProcessesWindows(processName: string, log: (msg: string) => void): Promise<ProcessCandidate[]> {
-    const candidates: ProcessCandidate[] = [];
+// ── Windows Implementation ───────────────────────────────────────────
 
-    // Try PowerShell first
+async function runPowerShellScript(script: string): Promise<string> {
+    const tempDir = os.tmpdir();
+    const scriptPath = path.join(tempDir, `ag_detect_${Date.now()}_${Math.random().toString(36).substring(7)}.ps1`);
+
     try {
-        const cmd = `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='${processName}'\\" | Select-Object ProcessId,CommandLine | ConvertTo-Json"`;
+        await fs.promises.writeFile(scriptPath, script, 'utf8');
+        const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`;
         const { stdout } = await execAsync(cmd);
+        return stdout;
+    } finally {
+        // Cleanup asynchronously
+        fs.unlink(scriptPath, () => { });
+    }
+}
 
-        if (!stdout.trim()) { return []; }
+async function findProcessesWindows(log: (msg: string) => void): Promise<ProcessCandidate[]> {
+    const scriptContent = `
+$ErrorActionPreference = 'SilentlyContinue'
+$candidates = @()
+
+function Test-IsAntigravity {
+    param($cl)
+    if (-not $cl) { return $false }
+    if ($cl -match 'antigravity') { return $true }
+    if ($cl -match 'language_server') { return $true }
+    if ($cl -match 'codeium') { return $true }
+    return $false
+}
+
+# 1. Try CIM (modern/faster)
+try {
+    $procs = Get-CimInstance Win32_Process -Filter "Name like '%antigravity%' OR Name like '%language_server%'"
+    foreach ($p in $procs) {
+        if (Test-IsAntigravity $p.CommandLine) {
+            $candidates += [PSCustomObject]@{ PID = $p.ProcessId; CmdLine = $p.CommandLine }
+        }
+    }
+} catch {
+    # 2. Fallback to WMI (if CIM unavailable)
+    try {
+        $procs = Get-WmiObject Win32_Process -Filter "Name like '%antigravity%' OR Name like '%language_server%'"
+        foreach ($p in $procs) {
+            if (Test-IsAntigravity $p.CommandLine) {
+                $candidates += [PSCustomObject]@{ PID = $p.ProcessId; CmdLine = $p.CommandLine }
+            }
+        }
+    } catch {}
+}
+
+$candidates | ConvertTo-Json -Depth 2
+`;
+
+    try {
+        const output = await runPowerShellScript(scriptContent);
+        if (!output.trim()) return [];
 
         let data: any;
         try {
-            data = JSON.parse(stdout.trim());
+            data = JSON.parse(output);
         } catch {
-            // checking if output is not JSON but maybe single object not in array?
-            // Powershell ConvertTo-Json sometimes behaves oddly with single items vs arrays
-            // But usually it's fine. If parse fails, we'll try WMIC.
-            throw new Error('Invalid JSON from PowerShell');
+            // sometimes ConvertTo-Json outputs nothing or invalid multiple objects if not handled right
+            return [];
         }
 
         const items = Array.isArray(data) ? data : [data];
 
-        for (const item of items) {
-            if (item.CommandLine && isAntigravityProcess(item.CommandLine)) {
-                candidates.push({
-                    pid: item.ProcessId,
-                    cmdLine: item.CommandLine
-                });
-            }
-        }
-
-    } catch (e) {
-        log('PowerShell process lookup failed/empty, trying WMIC...');
-        // Fallback to WMIC
-        try {
-            const cmd = `wmic process where "name='${processName}'" get ProcessId,CommandLine /format:list`;
-            const { stdout } = await execAsync(cmd);
-            const blocks = stdout.split(/\n\s*\n/).filter(b => b.trim().length > 0);
-
-            for (const block of blocks) {
-                const pidMatch = block.match(/ProcessId=(\d+)/);
-                const cmdMatch = block.match(/CommandLine=(.+)/);
-                if (pidMatch && cmdMatch && isAntigravityProcess(cmdMatch[1])) {
-                    candidates.push({
-                        pid: parseInt(pidMatch[1], 10),
-                        cmdLine: cmdMatch[1].trim()
-                    });
-                }
-            }
-        } catch (wmicErr: any) {
-            log(`WMIC process lookup failed: ${wmicErr.message}`);
-        }
+        return items.map((i: any) => ({
+            pid: i.PID,
+            cmdLine: i.CmdLine || ''
+        }));
+    } catch (e: any) {
+        log(`Windows process lookup failed: ${e.message}`);
+        return [];
     }
-
-    return candidates;
 }
 
-async function findProcessesUnix(processName: string, log: (msg: string) => void): Promise<ProcessCandidate[]> {
-    const candidates: ProcessCandidate[] = [];
-    const cmd = process.platform === 'darwin'
-        ? `pgrep -fl ${processName}`
-        : `pgrep -af ${processName}`;
+async function getListeningPortsWindows(pid: number, log: (msg: string) => void): Promise<number[]> {
+    // Method 1: PowerShell Get-NetTCPConnection (Windows 8/Server 2012+)
+    const scriptContent = `
+$ErrorActionPreference = 'SilentlyContinue'
+Get-NetTCPConnection -OwningProcess ${pid} -State Listen | Select-Object -ExpandProperty LocalPort | ConvertTo-Json
+`;
 
     try {
+        const output = await runPowerShellScript(scriptContent);
+        if (output.trim()) {
+            const data = JSON.parse(output);
+            let ports: number[] = [];
+            if (Array.isArray(data)) {
+                ports = data.map((p: any) => Number(p));
+            } else {
+                ports = [Number(data)];
+            }
+            return ports.filter(n => !isNaN(n)).sort((a, b) => a - b);
+        }
+    } catch {
+        // Fallback to netstat below
+    }
+
+    // Method 2: netstat (Legacy/Universally available)
+    try {
+        const cmd = `netstat -ano`;
         const { stdout } = await execAsync(cmd);
+        const ports: number[] = [];
+        // Match lines ending with the PID
+        // TCP    0.0.0.0:12345    0.0.0.0:0    LISTENING    1234
         const lines = stdout.split('\n');
-
         for (const line of lines) {
-            if (!line.trim()) continue;
-
-            // pgrep -fl/-af output: <pid> <full_command_line>
-            const parts = line.trim().split(/\s+/);
-            const pidStr = parts[0];
-            const pid = parseInt(pidStr, 10);
-
-            // The rest of the line is the command line
-            const cmdLine = line.substring(pidStr.length).trim();
-
-            if (cmdLine && isAntigravityProcess(cmdLine)) {
-                candidates.push({ pid, cmdLine });
+            if (line.trim().endsWith(`${pid}`)) {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length >= 2 && (parts[0].startsWith('TCP') || parts[0].startsWith('UDP'))) {
+                    // Extract port from local address (2nd column: 0.0.0.0:12345)
+                    const localAddr = parts[1];
+                    const portMsg = localAddr.split(':').pop();
+                    if (portMsg) {
+                        const p = parseInt(portMsg, 10);
+                        if (!ports.includes(p)) ports.push(p);
+                    }
+                }
             }
         }
+        return ports.sort((a, b) => a - b);
     } catch (e: any) {
-        log(`Unix process lookup failed: ${e.message}`);
+        log(`Failed to get listening ports via netstat: ${e.message}`);
+        return [];
+    }
+}
+
+
+// ── Unix Implementation ──────────────────────────────────────────────
+
+async function findProcessesUnix(log: (msg: string) => void): Promise<ProcessCandidate[]> {
+    const candidates: ProcessCandidate[] = [];
+
+    // Search for both 'antigravity' and 'language_server' to be safe
+    const searchTerms = ['antigravity', 'language_server'];
+    const processedPids = new Set<number>();
+
+    // On MacOS, -fl provides PID and full command line.
+    // On Linux, -fla provides PID and full command line.
+    const flags = process.platform === 'darwin' ? '-fl' : '-fla';
+
+    for (const term of searchTerms) {
+        try {
+            const cmd = `pgrep ${flags} "${term}"`;
+            const { stdout } = await execAsync(cmd);
+            const lines = stdout.split('\n');
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+
+                // Output format: <pid> <command line>
+                const match = line.trim().match(/^(\d+)\s+(.+)$/);
+                if (match) {
+                    const pid = parseInt(match[1], 10);
+                    const cmdLine = match[2];
+
+                    if (!processedPids.has(pid) && isAntigravityProcess(cmdLine)) {
+                        candidates.push({ pid, cmdLine });
+                        processedPids.add(pid);
+                    }
+                }
+            }
+        } catch (e) {
+            // pgrep returns exit code 1 if no processes found
+        }
     }
 
     return candidates;
 }
 
-// Helper to get ports on Unix (extracted from original findProcessUnix to be standalone)
+// Helper to get ports on Unix
 async function getListeningPortsUnix(pid: number, log: (msg: string) => void): Promise<number[]> {
     const portCmd = process.platform === 'darwin'
         ? `lsof -nP -a -iTCP -sTCP:LISTEN -p ${pid}`
@@ -226,13 +311,25 @@ async function getListeningPortsUnix(pid: number, log: (msg: string) => void): P
 
     try {
         const { stdout: portOut } = await execAsync(portCmd);
-        const portRegex = new RegExp(`(?:TCP|UDP)\\s+(?:\\*|[\\d.]+|\\[[\\da-f:]+\\]):(\\d+)\\s+\\(LISTEN\\)`, 'gim');
         const ports: number[] = [];
+
+        // Match lsof format: ... TCP *:12345 (LISTEN)
+        const lsofRegex = /(?:TCP|UDP)\s+(?:.*?):(\d+)\s+\(LISTEN\)/gi;
         let match;
-        while ((match = portRegex.exec(portOut)) !== null) {
+        while ((match = lsofRegex.exec(portOut)) !== null) {
             const p = parseInt(match[1], 10);
-            if (!ports.includes(p)) { ports.push(p); }
+            if (!ports.includes(p)) ports.push(p);
         }
+
+        // Match ss format: ... 127.0.0.1:12345 ...
+        // Note: ss output for `ss -tlnp` looks like: 
+        // LISTEN 0 128 127.0.0.1:12345 0.0.0.0:* users:(("name",pid=123,fd=4))
+        const ssRegex = /(?:127\.0\.0\.1|0\.0\.0\.0|\[::1?\]|\*):(\d+)/g;
+        while ((match = ssRegex.exec(portOut)) !== null) {
+            const p = parseInt(match[1], 10);
+            if (!ports.includes(p)) ports.push(p);
+        }
+
         return ports.sort((a, b) => a - b);
     } catch {
         return [];
@@ -241,44 +338,16 @@ async function getListeningPortsUnix(pid: number, log: (msg: string) => void): P
 
 function isAntigravityProcess(commandLine: string): boolean {
     const lower = commandLine.toLowerCase();
+
+    // Check for specific arguments that indicate it's the right process
     if (/--app_data_dir\s+antigravity\b/i.test(commandLine)) { return true; }
+
+    // Also check for path segments if arg check fails (fallback)
     if (lower.includes('\\antigravity\\') || lower.includes('/antigravity/')) { return true; }
+
     return false;
 }
 
-async function getListeningPortsWindows(pid: number, log: (msg: string) => void): Promise<number[]> {
-    try {
-        // Try PowerShell
-        const cmd = `powershell -NoProfile -Command "Get-NetTCPConnection -OwningProcess ${pid} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort | ConvertTo-Json"`;
-        const { stdout } = await execAsync(cmd);
-
-        if (!stdout.trim()) { return []; }
-
-        const data = JSON.parse(stdout.trim());
-        if (Array.isArray(data)) {
-            return data.filter(p => typeof p === 'number').sort((a, b) => a - b);
-        } else if (typeof data === 'number') {
-            return [data];
-        }
-    } catch {
-        try {
-            // Fallback: netstat
-            const cmd = `netstat -ano | findstr "${pid}"`;
-            const { stdout } = await execAsync(cmd);
-            const ports: number[] = [];
-            const regex = new RegExp(`(?:127\\.0\\.0\\.1|0\\.0\\.0\\.0|\\[::1?\\]):(\\d+)\\s+(?:0\\.0\\.0\\.0:0|\\[::\\]:0|\\*:\\*).*?\\s+${pid}$`, 'gim');
-            let match;
-            while ((match = regex.exec(stdout)) !== null) {
-                const p = parseInt(match[1], 10);
-                if (!ports.includes(p)) { ports.push(p); }
-            }
-            return ports.sort((a, b) => a - b);
-        } catch {
-            log('Failed to get listening ports via netstat');
-        }
-    }
-    return [];
-}
 
 async function findWorkingPort(ports: number[], csrfToken: string, log: (msg: string) => void): Promise<number | null> {
     for (const port of ports) {
