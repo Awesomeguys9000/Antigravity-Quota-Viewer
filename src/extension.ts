@@ -159,8 +159,27 @@ export async function activate(context: vscode.ExtensionContext) {
         },
     });
 
-    // ── Start the quota service ──────────────────────────────────────
-    const connected = await quotaService.initialize();
+    // ── Start the quota service (with retry for race condition) ─────
+    const MAX_RETRIES = 10;
+    const INITIAL_DELAY_MS = 2000; // 2 seconds
+    const MAX_DELAY_MS = 30000;    // 30 seconds
+
+    let connected = false;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        connected = await quotaService.initialize();
+        if (connected) {
+            break;
+        }
+
+        if (attempt < MAX_RETRIES) {
+            const delay = Math.min(INITIAL_DELAY_MS * Math.pow(1.5, attempt - 1), MAX_DELAY_MS);
+            globalStatusBarItem.text = `$(sync~spin) AG Monitor: Retry ${attempt}/${MAX_RETRIES}...`;
+            globalStatusBarItem.tooltip = `AG Monitor — Waiting for language server (attempt ${attempt})`;
+            console.log(`[AG Monitor] Connection attempt ${attempt} failed, retrying in ${Math.round(delay / 1000)}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+
     if (connected) {
         quotaService.startPolling(30_000); // Poll every 30 seconds
         globalStatusBarItem.text = '$(pulse) AG Monitor';
