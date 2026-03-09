@@ -574,16 +574,24 @@ export class QuotaService {
                 extensionName: 'antigravity',
                 locale: 'en',
             },
-            chatMessages: [
-                { role: 'user', content: 'hi' },
-            ],
+            document: {
+                text: '// hi\n',
+                cursorOffset: 6,
+                language: 'LANGUAGE_PYTHON',
+                editorLanguage: 'python',
+                lineEnding: '\n',
+            },
+            editorOptions: {
+                tabSize: 4,
+                insertSpaces: true,
+            },
             modelOrAlias: { model: modelId },
         });
 
         const options: https.RequestOptions = {
             hostname: '127.0.0.1',
             port: connectPort,
-            path: '/exa.language_server_pb.LanguageServerService/GetChatResponse',
+            path: '/exa.language_server_pb.LanguageServerService/GetCompletions',
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
