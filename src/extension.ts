@@ -4,6 +4,14 @@ import { UsageTracker } from './usageTracker';
 import { SidebarProvider } from './sidebarProvider';
 import { MODEL_GROUPS, getGroupConfig, getGroupForModel, getWorstRemainingInGroup, getTrafficLight, getTrafficEmoji, groupModels } from './modelGroups';
 
+// ── Timer-Reset Ping State ───────────────────────────────────────────
+
+const FOUR_HOURS_30_MIN_MS = 4 * 60 * 60 * 1000 + 30 * 60 * 1000; // 4h30m
+const FOUR_HOURS_55_MIN_MS = 4 * 60 * 60 * 1000 + 55 * 60 * 1000; // 4h55m
+
+/** Tracks the previous max timeUntilReset per group for reset detection */
+let previousGroupResetMs = new Map<string, number>();
+
 // ── Status Bar Items ─────────────────────────────────────────────────
 
 interface GroupStatusBarItem {
@@ -43,6 +51,7 @@ export async function activate(context: vscode.ExtensionContext) {
         tracker.recordSnapshot(snapshot);
         updateStatusBar(snapshot);
         sidebarProvider.pushUpdate(snapshot);
+        checkForTimerResets(snapshot, quotaService);
     });
 
     quotaService.onError(err => {
@@ -285,6 +294,45 @@ function updateStatusBar(snapshot: QuotaSnapshot): void {
         }
 
         gItem.item.show();
+    }
+}
+
+// ── Timer-Reset Detection ────────────────────────────────────────────
+
+function checkForTimerResets(snapshot: QuotaSnapshot, quotaService: QuotaService): void {
+    const config = vscode.workspace.getConfiguration('agmonitor');
+    if (!config.get<boolean>('enableResetPing', true)) {
+        return;
+    }
+
+    const grouped = groupModels(snapshot.models);
+
+    for (const group of MODEL_GROUPS) {
+        const models = grouped.get(group.id);
+        if (!models || models.length === 0) { continue; }
+
+        // Find the max timeUntilReset in this group
+        let maxResetMs = 0;
+        for (const m of models) {
+            if (m.timeUntilReset > maxResetMs) {
+                maxResetMs = m.timeUntilReset;
+            }
+        }
+
+        const prevMs = previousGroupResetMs.get(group.id);
+        previousGroupResetMs.set(group.id, maxResetMs);
+
+        // Detect reset: previous was > 4h30m (timer counting down from ~5h)
+        // and current jumped back above 4h55m (timer reset back to ~5h)
+        if (prevMs !== undefined
+            && prevMs > FOUR_HOURS_30_MIN_MS
+            && maxResetMs > FOUR_HOURS_55_MIN_MS
+            && maxResetMs > prevMs) {
+            // Timer jumped up — reset detected. Ping one model in this group.
+            const target = models[0];
+            console.log(`[AG Monitor] Timer reset detected for group "${group.name}". Pinging "${target.modelId}"`);
+            quotaService.pingModel(target.modelId);
+        }
     }
 }
 

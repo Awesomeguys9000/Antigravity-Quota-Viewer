@@ -556,6 +556,66 @@ export class QuotaService {
         await this._fetchAndEmit();
     }
 
+    /**
+     * Fire-and-forget ping to a model to start its usage timer.
+     * The response is fully discarded.
+     */
+    pingModel(modelId: string): void {
+        if (!this._processInfo) {
+            this._log(`[Ping] Skipped "${modelId}" — not connected`);
+            return;
+        }
+
+        const { connectPort, csrfToken } = this._processInfo;
+
+        const body = JSON.stringify({
+            metadata: {
+                ideName: 'antigravity',
+                extensionName: 'antigravity',
+                locale: 'en',
+            },
+            chatMessages: [
+                { role: 'user', content: 'hi' },
+            ],
+            modelOrAlias: { model: modelId },
+        });
+
+        const options: https.RequestOptions = {
+            hostname: '127.0.0.1',
+            port: connectPort,
+            path: '/exa.language_server_pb.LanguageServerService/GetChatResponse',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body),
+                'Connect-Protocol-Version': '1',
+                'X-Codeium-Csrf-Token': csrfToken,
+            },
+            rejectUnauthorized: false,
+            timeout: 10000,
+        };
+
+        this._log(`[Ping] Sending "hi" to "${modelId}" on port ${connectPort}`);
+
+        const req = https.request(options, res => {
+            // Drain the response body so the socket is freed, but discard it
+            res.resume();
+            res.on('end', () => {
+                this._log(`[Ping] Response from "${modelId}": status ${res.statusCode} (discarded)`);
+            });
+        });
+
+        req.on('error', err => {
+            this._log(`[Ping] Error pinging "${modelId}": ${(err as Error).message}`);
+        });
+        req.on('timeout', () => {
+            req.destroy();
+            this._log(`[Ping] Timeout pinging "${modelId}"`);
+        });
+        req.write(body);
+        req.end();
+    }
+
     private async _fetchAndEmit(): Promise<void> {
         if (!this._processInfo) {
             // Not initialized yet — try to connect
