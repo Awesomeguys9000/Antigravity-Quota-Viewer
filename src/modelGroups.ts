@@ -77,12 +77,17 @@ export function groupModels(models: ModelQuotaInfo[]): Map<string, ModelQuotaInf
  */
 export function getWorstRemainingInGroup(models: ModelQuotaInfo[]): number {
     let worst = 100;
+    let hasKnownPercentage = false;
     for (const m of models) {
-        if (m.remainingPercentage !== undefined && m.remainingPercentage < worst) {
-            worst = m.remainingPercentage;
+        if (m.remainingPercentage !== undefined) {
+            hasKnownPercentage = true;
+            if (m.remainingPercentage < worst) {
+                worst = m.remainingPercentage;
+            }
         }
     }
-    return worst;
+    // If all models in the group have unknown percentages (?), default the group to 0
+    return hasKnownPercentage ? worst : 0;
 }
 
 // ── Traffic Light Logic ──────────────────────────────────────────────
