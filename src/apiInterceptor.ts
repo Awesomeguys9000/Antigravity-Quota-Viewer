@@ -440,14 +440,23 @@ function fetchQuota(port: number, csrfToken: string): Promise<any> {
 
 function parseQuotaResponse(data: any): QuotaSnapshot {
     const userStatus = data.userStatus || {};
+
     const planInfo = userStatus.planStatus?.planInfo;
-    const availableCredits = userStatus.planStatus?.availablePromptCredits;
+    
+    // AI credits (prompt credits) are located in userTier.availableCredits under GOOGLE_ONE_AI
+    let availableCreditsStr: string | undefined;
+    if (userStatus.userTier && Array.isArray(userStatus.userTier.availableCredits)) {
+        const creditObj = userStatus.userTier.availableCredits.find((c: any) => c.creditType === 'GOOGLE_ONE_AI');
+        if (creditObj) {
+            availableCreditsStr = creditObj.creditAmount;
+        }
+    }
 
     let promptCredits: PromptCreditsInfo | undefined;
-    if (planInfo && availableCredits !== undefined) {
+    if (planInfo && availableCreditsStr !== undefined) {
         const monthly = Number(planInfo.monthlyPromptCredits);
-        const available = Number(availableCredits);
-        if (monthly > 0) {
+        const available = Number(availableCreditsStr);
+        if (monthly > 0 && !isNaN(available)) {
             promptCredits = {
                 available,
                 monthly,
