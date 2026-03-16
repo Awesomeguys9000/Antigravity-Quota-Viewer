@@ -94,6 +94,11 @@
           "default": true,
           "description": "Automatically ping models when their timer resets to start the usage window early"
         },
+        "agmonitor.maxPromptCredits": {
+          "type": "integer",
+          "default": 0,
+          "description": "Maximum number of AI credits (prompt credits). Set to 0 to use the server-provided limit (usually 50,000)."
+        },
         "agmonitor.quotaLimits": {
           "type": "object",
           "default": {

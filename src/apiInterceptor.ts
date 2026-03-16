@@ -438,7 +438,7 @@ function fetchQuota(port: number, csrfToken: string): Promise<any> {
     });
 }
 
-function parseQuotaResponse(data: any): QuotaSnapshot {
+function parseQuotaResponse(data: any, maxPromptCredits: number = 0): QuotaSnapshot {
     const userStatus = data.userStatus || {};
 
     const planInfo = userStatus.planStatus?.planInfo;
@@ -454,7 +454,7 @@ function parseQuotaResponse(data: any): QuotaSnapshot {
 
     let promptCredits: PromptCreditsInfo | undefined;
     if (planInfo && availableCreditsStr !== undefined) {
-        const monthly = Number(planInfo.monthlyPromptCredits);
+        const monthly = maxPromptCredits > 0 ? maxPromptCredits : Number(planInfo.monthlyPromptCredits);
         const available = Number(availableCreditsStr);
         if (monthly > 0 && !isNaN(available)) {
             promptCredits = {
@@ -643,7 +643,9 @@ export class QuotaService {
         try {
             const raw = await fetchQuota(this._processInfo.connectPort, this._processInfo.csrfToken);
             this._consecutiveFailures = 0;
-            const snapshot = parseQuotaResponse(raw);
+            const config = vscode.workspace.getConfiguration('agmonitor');
+            const maxCredits = config.get<number>('maxPromptCredits', 0);
+            const snapshot = parseQuotaResponse(raw, maxCredits);
             this._lastSnapshot = snapshot;
             this._onUpdate.fire(snapshot);
         } catch (err: any) {
@@ -660,7 +662,9 @@ export class QuotaService {
                     try {
                         const raw = await fetchQuota(this._processInfo!.connectPort, this._processInfo!.csrfToken);
                         this._consecutiveFailures = 0;
-                        const snapshot = parseQuotaResponse(raw);
+                        const config = vscode.workspace.getConfiguration('agmonitor');
+                        const maxCredits = config.get<number>('maxPromptCredits', 0);
+                        const snapshot = parseQuotaResponse(raw, maxCredits);
                         this._lastSnapshot = snapshot;
                         this._onUpdate.fire(snapshot);
                         return;
