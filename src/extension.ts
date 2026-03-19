@@ -267,8 +267,8 @@ function updateStatusBar(snapshot: QuotaSnapshot): void {
         gItem.item.text = `${emoji} ${label}: ${Math.round(worstPct)}%`;
 
         // Check for long reset (> 6 hours)
-        const FIVE_HOURS_MS = 21600000;
-        const isLongReset = models.some(m => m.timeUntilReset > FIVE_HOURS_MS);
+        const SIX_HOURS_MS = 21600000;
+        const isLongReset = models.some(m => m.timeUntilReset > SIX_HOURS_MS);
 
         // Build tooltip: shared reset time at top, models listed below
         const sharedReset = models[0]?.timeUntilResetFormatted ?? 'Unknown';

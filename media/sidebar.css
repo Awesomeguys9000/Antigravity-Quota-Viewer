@@ -391,7 +391,7 @@ body {
     }
 }
 
-/* ── Long Reset Alert (> 5h) ──────────────────────────────────── */
+/* ── Long Reset Alert (> 6h) ──────────────────────────────────── */
 
 .group-panel.long-reset {
     border-color: rgba(239, 68, 68, 0.6);

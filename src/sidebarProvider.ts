@@ -81,11 +81,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 this._stickyRedStates.set(g.id, state);
             }
 
-            const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
+            const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
             const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
             // 3. Activation: If > 5 hours, activate sticky mode
-            if (maxResetMs > FIVE_HOURS_MS) {
+            if (maxResetMs > SIX_HOURS_MS) {
                 state.active = true;
                 state.dippedBelow4h = false; // Reset trackers on new activation
                 state.conditionAMet = false;
