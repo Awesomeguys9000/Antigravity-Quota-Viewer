@@ -116,11 +116,11 @@
 
         // Reset countdown bar (blue, 5hr = 100%, 0 = 0%)
         if (group.models.length > 0) {
-            const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+            const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
             const resetMs = group.models[0].timeUntilResetMs;
             const resetFormatted = group.models[0].resetFormatted;
             const isReady = resetFormatted === 'Ready' || resetMs <= 0;
-            const resetPct = isReady ? 0 : Math.min(100, Math.round((resetMs / SIX_HOURS_MS) * 100));
+            const resetPct = isReady ? 0 : Math.min(100, Math.round((resetMs / FIVE_HOURS_MS) * 100));
 
             const resetBar = el('div', 'quota-bar');
             const resetFill = el('div', 'quota-bar-fill reset-bar');

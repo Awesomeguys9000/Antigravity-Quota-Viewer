@@ -577,55 +577,67 @@ export class QuotaService {
 
         const { connectPort, csrfToken } = this._processInfo;
 
-        const body = JSON.stringify({
-            metadata: {
-                ideName: 'antigravity',
-                extensionName: 'antigravity',
-                locale: 'en',
-            },
-            chatMessages: [
-                {
-                    intent: 'CHAT_MESSAGE_INTENT_USER_PROMPT',
-                    message: 'hi'
-                }
-            ],
-            modelOrAlias: { model: modelId },
-        });
-
-        const options: https.RequestOptions = {
-            hostname: '127.0.0.1',
-            port: connectPort,
-            path: '/exa.language_server_pb.LanguageServerService/GetChatResponse',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(body),
-                'Connect-Protocol-Version': '1',
-                'X-Codeium-Csrf-Token': csrfToken,
-            },
-            rejectUnauthorized: false,
-            timeout: 10000,
+        const makeReq = (path: string, bodyObj: any) => {
+            return new Promise<number>((resolve) => {
+                const body = JSON.stringify(bodyObj);
+                const options: https.RequestOptions = {
+                    hostname: '127.0.0.1',
+                    port: connectPort,
+                    path,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Content-Length': Buffer.byteLength(body),
+                        'Connect-Protocol-Version': '1',
+                        'X-Codeium-Csrf-Token': csrfToken,
+                    },
+                    rejectUnauthorized: false,
+                    timeout: 5000,
+                };
+                const req = https.request(options, res => {
+                    res.resume();
+                    res.on('end', () => resolve(res.statusCode || 0));
+                });
+                req.on('error', () => resolve(0));
+                req.write(body);
+                req.end();
+            });
         };
 
-        this._log(`[Ping] Sending "hi" to "${modelId}" on port ${connectPort}`);
+        const metadata = {
+            ideName: 'antigravity',
+            extensionName: 'antigravity',
+            locale: 'en',
+        };
 
-        const req = https.request(options, res => {
-            // Drain the response body so the socket is freed, but discard it
-            res.resume();
-            res.on('end', () => {
-                this._log(`[Ping] Response from "${modelId}": status ${res.statusCode} (discarded)`);
+        this._log(`[Ping] Testing endpoints for "${modelId}" on port ${connectPort}...`);
+
+        (async () => {
+            let startStatus = await makeReq('/exa.language_server_pb.LanguageServerService/StartCascade', { metadata });
+            this._log(`[Ping] StartCascade: ${startStatus}`);
+
+            let sendStatus = await makeReq('/exa.language_server_pb.LanguageServerService/SendUserCascadeMessage', {
+                cascadeId: "test",
+                items: [{ text: 'hi' }],
+                cascadeConfig: { plannerConfig: { requestedModel: { model: modelId } } }
             });
-        });
+            this._log(`[Ping] SendUserCascadeMessage: ${sendStatus}`);
 
-        req.on('error', err => {
-            this._log(`[Ping] Error pinging "${modelId}": ${(err as Error).message}`);
-        });
-        req.on('timeout', () => {
-            req.destroy();
-            this._log(`[Ping] Timeout pinging "${modelId}"`);
-        });
-        req.write(body);
-        req.end();
+            let genStatus = await makeReq('/exa.language_server_pb.LanguageServerService/StreamGenerateContent', {
+                metadata,
+                model: modelId,
+                requestType: 'agent',
+                request: { contents: [{ role: 'user', parts: [{ text: 'hi' }] }] }
+            });
+            this._log(`[Ping] StreamGenerateContent: ${genStatus}`);
+
+            let chatStatus = await makeReq('/exa.language_server_pb.LanguageServerService/GetChatResponse', {
+                metadata,
+                chatMessages: [{ intent: 'CHAT_MESSAGE_INTENT_USER_PROMPT', message: 'hi' }],
+                modelOrAlias: { model: modelId }
+            });
+            this._log(`[Ping] GetChatResponse: ${chatStatus}`);
+        })().catch(e => this._log(`[Ping] Error testing endpoints: ${e}`));
     }
 
     private async _fetchAndEmit(): Promise<void> {

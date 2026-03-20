@@ -1,3 +1,4 @@
+
 const https = require('https');
 const { execSync } = require('child_process');
 
@@ -18,7 +19,7 @@ async function getProcessInfo() {
     const output = runPowerShellScript(script);
     const matches = output.match(/PID\s*:\s*(\d+)/g);
     if (!matches) return null;
-    
+
     // We already know from the user's log that PID=51472 and connectPort=65386.
     // However, the port might have changed. Let's extract the CSRF token.
     const tokenMatch = output.match(/--csrf_token[=\s]+([a-f0-9\-]+)/i);
@@ -28,7 +29,7 @@ async function getProcessInfo() {
 
     // Get listening ports for all Antigravity processes
     const pids = [...new Set(matches.map(m => m.match(/(\d+)/)[1]))];
-    
+
     for (const pid of pids) {
         const netstat = execSync('netstat -ano', { encoding: 'utf8' });
         const lines = netstat.split('\n');
@@ -67,33 +68,68 @@ function testPort(port, csrfToken) {
     });
 }
 
-function fetchQuota(port, csrfToken) {
+function testEndpoint(port, csrfToken, path, body) {
     return new Promise(resolve => {
         const options = {
-            hostname: '127.0.0.1', port, path: '/exa.language_server_pb.LanguageServerService/GetUserStatus', method: 'POST',
+            hostname: '127.0.0.1', port, path, method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', 'X-Codeium-Csrf-Token': csrfToken },
             rejectUnauthorized: false
         };
         const req = https.request(options, res => {
             let data = '';
             res.on('data', chunk => data += chunk);
-            res.on('end', () => resolve(JSON.parse(data)));
+            res.on('end', () => resolve({ status: res.statusCode, body: data }));
         });
-        req.write(JSON.stringify({ metadata: { ideName: 'antigravity', extensionName: 'antigravity', locale: 'en' } }));
+        req.write(JSON.stringify(body));
         req.end();
     });
 }
 
 (async () => {
     try {
-        const info = await getProcessInfo();
+        let info = null;
+        for (let i = 0; i < 5; i++) {
+            info = await getProcessInfo();
+            if (info) break;
+            console.log("Looking for language server...");
+            await new Promise(r => setTimeout(r, 2000));
+        }
+
         if (!info) {
-            console.log("Could not find language server");
+            console.log("Could not find language server. Please ensure Antigravity is running.");
             return;
         }
         console.log("Found LS on port " + info.port);
-        const data = await fetchQuota(info.port, info.csrfToken);
-        console.log(JSON.stringify(data.userStatus.planStatus, null, 2));
+
+        const metadata = { ideName: 'antigravity', extensionName: 'antigravity', locale: 'en' };
+
+        console.log("\n--- Testing StartCascade ---");
+        const cascadeRes = await testEndpoint(info.port, info.csrfToken, '/exa.language_server_pb.LanguageServerService/StartCascade', {});
+        console.log(`Status: ${cascadeRes.status}`);
+        
+        if (cascadeRes.status === 200) {
+            const cascadeData = JSON.parse(cascadeRes.body);
+            console.log(`Cascade ID: ${cascadeData.cascadeId}`);
+            
+            console.log("\n--- Testing SendUserCascadeMessage ---");
+            const sendRes = await testEndpoint(info.port, info.csrfToken, '/exa.language_server_pb.LanguageServerService/SendUserCascadeMessage', {
+                cascadeId: cascadeData.cascadeId,
+                items: [{ text: 'hi' }],
+                cascadeConfig: {
+                    plannerConfig: {
+                        requestedModel: { model: 'MODEL_PLACEHOLDER_M47' }
+                    }
+                }
+            });
+            console.log(`Status: ${sendRes.status}`);
+            
+            console.log("\n--- Testing DeleteCascadeTrajectory ---");
+            const delRes = await testEndpoint(info.port, info.csrfToken, '/exa.language_server_pb.LanguageServerService/DeleteCascadeTrajectory', {
+                cascadeId: cascadeData.cascadeId
+            });
+            console.log(`Status: ${delRes.status}`);
+        }
+
     } catch (e) {
         console.error(e);
     }
