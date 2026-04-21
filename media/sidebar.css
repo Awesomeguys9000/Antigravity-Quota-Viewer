@@ -217,20 +217,6 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-.eye-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 12px;
-    opacity: 0.5;
-    transition: opacity 0.2s;
-    padding: 2px;
-}
-
-.eye-btn:hover {
-    opacity: 1;
-}
-
 /* ── Per-Model Rows ────────────────────────────────────────────── */
 
 .group-models {

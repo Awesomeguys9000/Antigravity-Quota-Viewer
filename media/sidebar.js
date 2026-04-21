@@ -99,12 +99,7 @@
             <div class="traffic-light ${group.light}"></div>
             <span class="group-name">${group.name}</span>
             <span class="group-pct">${group.worstPct}%</span>
-            <button class="eye-btn" title="Toggle visibility">👁</button>
         `;
-        header.querySelector('.eye-btn').addEventListener('click', e => {
-            e.stopPropagation();
-            vscode.postMessage({ command: 'toggleGroup', groupId: group.id });
-        });
         panel.appendChild(header);
 
         // Quota bar (usage remaining)
