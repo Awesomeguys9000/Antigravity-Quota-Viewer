@@ -97,7 +97,7 @@
         },
         "agmonitor.maxPromptCredits": {
           "type": "integer",
-          "default": 0,
+          "default": 1000,
           "description": "Maximum number of AI credits (prompt credits). Set to 0 to use the server-provided limit (usually 50,000)."
         },
         "agmonitor.quotaLimits": {
